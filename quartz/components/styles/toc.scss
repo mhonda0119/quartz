@@ -43,9 +43,9 @@ ul.toc-content.overflow {
   position: relative;
   margin: 0.5rem 0;
   padding: 0;
-  max-height: calc(100% - 2rem);
+  max-height: 40vh;
+  overflow-y: auto;
   overscroll-behavior: contain;
-  list-style: none;
 
   & > li > a {
     color: var(--dark);
