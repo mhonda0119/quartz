@@ -13,7 +13,8 @@
   },
   "scripts": {
     "quartz": "./quartz/bootstrap-cli.mjs",
-    "docs": "npx quartz build --serve -d docs",
+    "preview": "npx quartz build --serve -d \"C:/Users/mhonda0119/Documents/Obsidian/Note\"",
+    "publish": "npx quartz sync -d \"C:/Users/mhonda0119/Documents/Obsidian/Note\"",
     "check": "tsc --noEmit && npx prettier . --check",
     "format": "npx prettier . --write",
     "test": "tsx --test",
