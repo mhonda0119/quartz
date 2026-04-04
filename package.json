@@ -14,7 +14,8 @@
   "scripts": {
     "quartz": "./quartz/bootstrap-cli.mjs",
     "preview": "npx quartz build --serve -d \"C:/Users/mhonda0119/Documents/Obsidian/Note\"",
-    "publish": "npx quartz sync -d \"C:/Users/mhonda0119/Documents/Obsidian/Note\"",
+    "sync-content": "node scripts/sync-content.mjs",
+    "publish": "npm run sync-content && git add content/ && git commit -m \"Update published content\" && git push origin v4",
     "check": "tsc --noEmit && npx prettier . --check",
     "format": "npx prettier . --write",
     "test": "tsx --test",
