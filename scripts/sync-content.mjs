@@ -1,6 +1,6 @@
-import { readdir, readFile, copyFile, mkdir } from "fs/promises"
-import { existsSync, statSync } from "fs"
-import { join, relative, dirname, basename } from "path"
+import { readdir, readFile, copyFile, mkdir, rm } from "fs/promises"
+import { existsSync, statSync, createWriteStream } from "fs"
+import { join, relative, dirname, basename, extname } from "path"
 
 const OBSIDIAN_VAULT = "C:/Users/mhonda0119/Documents/Obsidian/Note"
 const CONTENT_DIR = "content"
@@ -31,9 +31,7 @@ async function hasPublishTag(filePath) {
   }
 }
 
-async function findImageInVault(imageName, vaultRoot) {
-  const imageExt = /\.(png|jpg|jpeg|gif|svg|webp|bmp|ico)$/i
-  
+async function findFileInVault(fileName, vaultRoot, extensions = null) {
   async function searchDir(dir) {
     if (!existsSync(dir)) return null
     
@@ -47,10 +45,10 @@ async function findImageInVault(imageName, vaultRoot) {
       if (stat.isDirectory()) {
         const found = await searchDir(fullPath)
         if (found) return found
-      } else if (imageExt.test(entry)) {
-        // Match by filename only (ignore path prefix in Obsidian link)
-        if (entry.toLowerCase() === imageName.toLowerCase() || 
-            entry.toLowerCase() === basename(imageName).toLowerCase()) {
+      } else {
+        const nameMatch = entry.toLowerCase() === fileName.toLowerCase()
+        const extMatch = extensions ? extensions.includes(extname(entry).toLowerCase()) : true
+        if (nameMatch && extMatch) {
           return fullPath
         }
       }
@@ -61,91 +59,111 @@ async function findImageInVault(imageName, vaultRoot) {
   return await searchDir(vaultRoot)
 }
 
-async function copyReferencedImages(mdFilePath, contentSubDir) {
+async function copyReferencedFiles(mdFilePath, contentSubDir, vaultRoot, copiedFiles) {
   try {
     const content = await readFile(mdFilePath, "utf-8")
-    const vaultRoot = OBSIDIAN_VAULT
     
-    // Match Obsidian image links: ![[image.png|width]] or ![[image.png]]
-    const obsidianImageRegex = /!\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]/gi
-    // Match markdown image links: ![alt](path/image.png)
-    const markdownImageRegex = /!\[([^\]]*)\]\(([^)]+)\)/gi
+    // Match Obsidian links: ![[file.png|width]] or ![[file.pdf]] or [[file.pdf]]
+    const obsidianLinkRegex = /!?\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]/gi
+    // Match markdown links: ![alt](path/file.png) or [text](path/file.pdf)
+    const markdownLinkRegex = /!?\[([^\]]*)\]\(([^)]+)\)/gi
     
-    const imageExt = /\.(png|jpg|jpeg|gif|svg|webp|bmp|ico)$/i
+    const assetExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.ico', '.pdf', '.zip', '.mp4', '.mov', '.avi']
     let match
-    const copiedImages = new Set()
+    const mdDir = dirname(mdFilePath)
     
     // Process Obsidian links
-    while ((match = obsidianImageRegex.exec(content)) !== null) {
-      let imageName = match[1].trim()
+    while ((match = obsidianLinkRegex.exec(content)) !== null) {
+      let fileName = match[1].trim()
       // Remove size suffix like |214
-      if (imageName.includes("|")) {
-        imageName = imageName.split("|")[0].trim()
+      if (fileName.includes("|")) {
+        fileName = fileName.split("|")[0].trim()
       }
       
-      if (!imageExt.test(imageName)) continue
-      
-      const foundPath = await findImageInVault(imageName, vaultRoot)
-      if (foundPath) {
-        // Determine the relative path from vault root
-        const relPath = relative(vaultRoot, foundPath)
-        const contentImagePath = join(CONTENT_DIR, relPath)
-        
-        if (!copiedImages.has(contentImagePath)) {
-          // Create directory if needed
-          const contentImageDir = dirname(contentImagePath)
-          await mkdir(contentImageDir, { recursive: true })
-          
-          await copyFile(foundPath, contentImagePath)
-          console.log(`    📷 ${relPath}`)
-          copiedImages.add(contentImagePath)
-        }
+      // Search in same directory as markdown file first, then vault root
+      let foundPath = null
+      const localPath = join(mdDir, fileName)
+      if (existsSync(localPath)) {
+        foundPath = localPath
       } else {
-        console.log(`    ⚠ Image not found: ${imageName}`)
+        foundPath = await findFileInVault(fileName, vaultRoot, assetExtensions)
+      }
+      
+      if (foundPath) {
+        const relPath = relative(vaultRoot, foundPath)
+        const contentFilePath = join(CONTENT_DIR, relPath)
+        
+        if (!copiedFiles.has(contentFilePath)) {
+          const contentFileDir = dirname(contentFilePath)
+          await mkdir(contentFileDir, { recursive: true })
+          await copyFile(foundPath, contentFilePath)
+          console.log(`    📎 ${relPath}`)
+          copiedFiles.add(contentFilePath)
+        }
       }
     }
     
     // Process markdown links
-    while ((match = markdownImageRegex.exec(content)) !== null) {
-      let imagePath = match[2].trim()
-      imagePath = decodeURIComponent(imagePath)
+    while ((match = markdownLinkRegex.exec(content)) !== null) {
+      let filePath = match[2].trim()
+      filePath = decodeURIComponent(filePath)
       
-      if (!imageExt.test(imagePath)) continue
-      
-      // If it's a relative path, resolve it relative to the markdown file
-      let fullPath
-      if (!imagePath.startsWith("/") && !imagePath.match(/^[a-zA-Z]:/)) {
-        fullPath = join(dirname(mdFilePath), imagePath)
-      } else {
-        fullPath = join(vaultRoot, imagePath)
+      // Remove anchor if present
+      if (filePath.includes("#")) {
+        filePath = filePath.split("#")[0]
       }
       
-      if (existsSync(fullPath)) {
+      // Skip external links
+      if (filePath.startsWith("http://") || filePath.startsWith("https://")) continue
+      
+      // Resolve relative path
+      let fullPath
+      if (!filePath.startsWith("/") && !filePath.match(/^[a-zA-Z]:/)) {
+        fullPath = join(mdDir, filePath)
+      } else {
+        fullPath = join(vaultRoot, filePath)
+      }
+      
+      if (existsSync(fullPath) && statSync(fullPath).isFile()) {
         const relPath = relative(vaultRoot, fullPath)
-        const contentImagePath = join(CONTENT_DIR, relPath)
+        const contentFilePath = join(CONTENT_DIR, relPath)
         
-        if (!copiedImages.has(contentImagePath)) {
-          const contentImageDir = dirname(contentImagePath)
-          await mkdir(contentImageDir, { recursive: true })
-          
-          await copyFile(fullPath, contentImagePath)
-          console.log(`    📷 ${relPath}`)
-          copiedImages.add(contentImagePath)
+        if (!copiedFiles.has(contentFilePath)) {
+          const contentFileDir = dirname(contentFilePath)
+          await mkdir(contentFileDir, { recursive: true })
+          await copyFile(fullPath, contentFilePath)
+          console.log(`    📎 ${relPath}`)
+          copiedFiles.add(contentFilePath)
         }
       }
     }
   } catch (err) {
-    console.error(`  ⚠ Error copying images from ${mdFilePath}: ${err.message}`)
+    console.error(`  ⚠ Error copying referenced files from ${mdFilePath}: ${err.message}`)
+  }
+}
+
+async function cleanContentDir() {
+  console.log("Cleaning content directory...")
+  if (existsSync(CONTENT_DIR)) {
+    // Remove everything except .gitkeep
+    const entries = await readdir(CONTENT_DIR)
+    for (const entry of entries) {
+      if (entry === ".gitkeep") continue
+      const fullPath = join(CONTENT_DIR, entry)
+      await rm(fullPath, { recursive: true, force: true })
+    }
+  } else {
+    await mkdir(CONTENT_DIR, { recursive: true })
   }
 }
 
 async function syncFiles() {
   console.log("Syncing published content from Obsidian Vault...")
 
-  // Ensure content directory exists
-  if (!existsSync(CONTENT_DIR)) {
-    await mkdir(CONTENT_DIR, { recursive: true })
-  }
+  // Clean content directory first
+  await cleanContentDir()
+
+  const copiedFiles = new Set()
 
   async function processDir(vaultDir, contentSubDir) {
     const entries = await readdir(vaultDir)
@@ -167,8 +185,8 @@ async function syncFiles() {
           await copyFile(vaultPath, contentPath)
           console.log(`  ✓ ${relative(CONTENT_DIR, contentPath)}`)
           
-          // Copy images referenced in this published markdown file
-          await copyReferencedImages(vaultPath, contentSubDir)
+          // Copy files referenced in this published markdown file
+          await copyReferencedFiles(vaultPath, contentSubDir, OBSIDIAN_VAULT, copiedFiles)
         }
       }
     }
