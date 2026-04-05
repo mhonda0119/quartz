@@ -59,6 +59,10 @@ async function syncFiles() {
           await copyFile(vaultPath, contentPath)
           console.log(`  ✓ ${relative(CONTENT_DIR, contentPath)}`)
         }
+      } else if (/\.(png|jpg|jpeg|gif|svg|webp|bmp|ico)$/i.test(entry)) {
+        // Copy image files
+        await copyFile(vaultPath, contentPath)
+        console.log(`  ✓ ${relative(CONTENT_DIR, contentPath)}`)
       }
     }
   }
