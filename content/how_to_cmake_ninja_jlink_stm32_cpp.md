@@ -2,7 +2,7 @@
 refinement: refined
 title: STM32CubeMX,VSCode,C++,J-link開発環境構築
 description: STM32CubeMX, VSCode, C++, J-linkを使いたいです．
-socialImage: /file-20260411004347430.png
+socialImage: file-20260411004347430.png
 ---
 
 #CMake #Make #Makefile #Ninja #Software #Setup
