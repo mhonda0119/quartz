@@ -69,6 +69,8 @@ export const FilteredAssets: QuartzEmitterPlugin = () => ({
     const referencedFiles = collectReferencedFiles(content)
 
     for (const fp of referencedFiles) {
+      // Skip empty or whitespace-only paths
+      if (!fp.trim()) continue
       // Skip markdown files - they're handled by content emitters
       if (fp.endsWith(".md")) continue
 
