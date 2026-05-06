@@ -2,7 +2,7 @@ import { readdir, readFile, copyFile, mkdir, rm } from "fs/promises"
 import { existsSync, statSync, createWriteStream } from "fs"
 import { join, relative, dirname, basename, extname } from "path"
 
-const OBSIDIAN_VAULT = "C:/Users/mhonda0119/Documents/Obsidian/Note"
+const OBSIDIAN_VAULT = "Z:/obsidian/note"
 const CONTENT_DIR = "content"
 
 async function hasPublishTag(filePath) {
